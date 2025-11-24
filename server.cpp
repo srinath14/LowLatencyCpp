@@ -7,6 +7,9 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <fcntl.h>
+#include <sys/epoll.h>
+#include <future>
 using namespace std;
 /*
 create socket
@@ -17,19 +20,24 @@ accept
 
 void chatWithClient(int client_fd);
 
-class Threadpool{
-queue<int>threadpoolQueue;
-mutex mtx;
-condition_variable cv;
-vector<thread>threads;
-int size;
-bool stop;
+
+class Threadpool
+{
+    queue<int> threadpoolQueue;
+    mutex mtx;
+    condition_variable cv;
+    vector<thread> threads;
+    int size;
+    bool stop;
 
 public:
-    Threadpool(int size):size(size){
+    Threadpool(int size) : size(size)
+    {
         stop = false;
-        for(int i=0;i<size;i++){
-            threads.emplace_back([this]{
+        for (int i = 0; i < size; i++)
+        {
+            threads.emplace_back([this]
+                                 {
                 while(true){
                     int fd;
                 {
@@ -40,49 +48,94 @@ public:
                     threadpoolQueue.pop();
                 }
                     chatWithClient(fd);
-                }    
-            });
+                } });
         }
     }
-    void enqueue(int id){
-        {   lock_guard<mutex>lock(mtx);
+    void enqueue(int id)
+    {
+        {
+            lock_guard<mutex> lock(mtx);
             threadpoolQueue.push(id);
-
         }
         cv.notify_one();
     }
-    ~Threadpool(){
+    ~Threadpool()
+    {
         {
-            lock_guard<mutex>lock(mtx);
-            stop=true;
+            lock_guard<mutex> lock(mtx);
+            stop = true;
         }
         cv.notify_all();
-        for(int i=0;i<size;i++){
+        for (int i = 0; i < size; i++)
+        {
             threads[i].join();
         }
     }
 };
+Threadpool t(8);
+void epollEventThread(int epfd)
+{
+    struct epoll_event events[64];
 
-void chatWithClient(int client_fd){
+    while (true)
+    {
+        int n = epoll_wait(epfd, events, 64, -1);
+
+        for (int i = 0; i < n; i++)
+        {
+            int fd = events[i].data.fd;
+            if (events[i].events & EPOLLIN)
+            {
+                t.enqueue(fd);
+            }
+        }
+    }
+}
+
+
+void chatWithClient(int client_fd)
+{
     char buffer[1024];
-    while(true){
-        
+    while (true)
+    {
+
         int bytes_read = read(client_fd, buffer, 1023);
-        if (bytes_read <= 0) {
+        if (bytes_read > 0)
+        {
+            buffer[bytes_read] = '\0'; // terminate properly
+            cout << "Client: " << buffer << endl;
+            const char *msg = "hello from server";
+            write(client_fd, msg, strlen(msg));
+        }
+        else if (bytes_read = 0)
+        {
             cout << "Client disconnected\n";
             close(client_fd);
             return; // return so thread can handle next client
         }
-
-        buffer[bytes_read] = '\0';   // terminate properly
-        cout << "Client: " << buffer << endl;
-        const char *msg = "hello from server";
-        write(client_fd, msg, strlen(msg));
+        else
+        { // bytes_read<0
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                return;
+            }
+            else
+            {
+                cout << "read err from client" << endl;
+                close(client_fd);
+                return;
+            }
+        }
     }
 }
 int main()
 {
-    Threadpool t(8);
+    int epfd = epoll_create1(0);
+    promise<int>p;
+    auto fut = p.get_future();
+
+    thread epollthread(epollEventThread, epfd);
+
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     cout << sockfd << endl;
     sockaddr_in s, c;
@@ -113,14 +166,21 @@ int main()
             cout << "accept is failed" << endl;
             close(sockfd);
         }
-        //thread t(chatWithClient, client_fd);
-        //t.detach();
-        //threadpoolQueue.push(client_fd);
-        
-        t.enqueue(client_fd);
-        //chatWithClient(client_fd);
-        
-        //close(client_fd);
+        int flags = fcntl(client_fd, F_GETFL, 0);
+        // thread t(chatWithClient, client_fd);
+        // t.detach();
+        // threadpoolQueue.push(client_fd);
+        fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
+
+        struct epoll_event ev;
+        ev.data.fd = client_fd;
+        ev.events = EPOLLIN | EPOLLET;
+        epoll_ctl(epfd, EPOLL_CTL_ADD, client_fd, &ev);
+        // t.enqueue(client_fd);
+
+        // chatWithClient(client_fd);
+
+        // close(client_fd);
     }
 
     return 0;
