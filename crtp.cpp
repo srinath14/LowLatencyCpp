@@ -6,7 +6,7 @@ class PayementInterface{
     public:
         void pay(){
             std::cout<<"payement is done by Base"<<std::endl;
-            static_cast<Derived*>(this)->pay();
+            static_cast<Derived*>(this)->payImpl();
         }
 
 };
@@ -15,7 +15,7 @@ class PayementInterface{
 class UpiPayment:public PayementInterface<UpiPayment>{
 
     public:
-    void pay(){
+    void payImpl(){
         std::cout<<"payement is done by UPI"<<std::endl;
 
     }
@@ -24,7 +24,7 @@ class UpiPayment:public PayementInterface<UpiPayment>{
 class CashPayment:public PayementInterface<CashPayment>{
 
     public:
-    void pay(){
+    void payImpl(){
         std::cout<<"payement is done by Cash"<<std::endl;
 
     }
@@ -36,11 +36,17 @@ void processPayement(PayementInterface<T> *p){
 
 int main(){
 
-    UpiPayment *upi= new UpiPayment();
+    //UpiPayment *upi= new UpiPayment();
+
+    //PayementInterface<UpiPayment> *pupi = new UpiPayment();
+    //pupi->pay();
+
+    UpiPayment *upi = new UpiPayment();
+    upi->pay();
 
    
 
-    processPayement(upi);
+    //processPayement(upi);
 
     return 0;
 }

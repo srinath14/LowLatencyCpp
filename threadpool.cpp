@@ -43,7 +43,7 @@ public:
     }
     template<typename F, typename... Args>
 
-    auto enqueue(F&& f, Args&&... args)->future<decltype(f(args...))>
+    auto enqueue(F&& f, &&..Args. args)->future<decltype(f(args...))>
     {
         using return_type = decltype(f(args...));
         auto task = make_shared<packaged_task<return_type()>>(
