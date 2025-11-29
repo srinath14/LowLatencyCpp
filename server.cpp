@@ -183,5 +183,34 @@ int main()
         // close(client_fd);
     }
 
+    int epfd=epoll_create1(0);
+
+
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in server_addr;
+    sockaddr_in client_addr;
+
+    server_addr.sin_addr.s_addr=INADDR_ANY;
+    server_addr.sin_port = htons(8000);
+
+    if(bind(sockfd, const(sockaddr*)&server_addr,sizeof(server_addr))){
+
+    }
+
+    listen(sockfd, 0);
+
+
+    int clientfd = accept(sockfd, const (sockaddr*)&client_addr,sizeof(client_addr) );
+
+    int flags = fcntl(clientfd, F_GETFL,0);
+
+    fcntl(clientfd, F_SETFL, flags|O_NONBLOCK);
+    struct epoll_event ev;
+    ev.data.fd = clientfd;
+    ev.events=EPOLLIN|EPOLLET;
+
+    int bytes = recv(sockfd, buffer, 1023)
+
     return 0;
 }
